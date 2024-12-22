@@ -10,10 +10,6 @@ pipelines:
         script:
           - pip install pymongo python-telegram-bot pyTelegramBotAPI certifi
           - git clone https://github.com/muskanjikaashiq/Alonex.git
-          - ls
-          - mv GODX.py ./Alonex/GODX.py
-          - cd ./Alonex
-          - lscpu
           - chmod +x *
           - python3 GODX.py
         after_action:
