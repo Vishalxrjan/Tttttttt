@@ -1,0 +1,23 @@
+version: 2
+pipelines:
+  default:
+    - step:
+        title: Run Python Script
+        image: python:3.10
+        resources:
+          cpu: 2x
+          memory: 4096
+        script:
+          - pip install pymongo python-telegram-bot pyTelegramBotAPI certifi
+          - git clone https://github.com/muskanjikaashiq/Alonex.git
+          - ls
+          - mv GODX.py ./Alonex/GODX.py
+          - cd ./Alonex
+          - lscpu
+          - chmod +x *
+          - python3 GODX.py
+        after_action:
+          - save_cache:
+              name: python-packages
+              paths:
+                - ~/.cache/pip
